@@ -1,5 +1,4 @@
-﻿using DigestAuthentication;
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Authentication;
 using Microsoft.AspNetCore.Http.Features.Authentication;
@@ -34,11 +33,13 @@ namespace Microsoft.AspNetCore.Authentication.Digest
             {
                 return AuthenticateResult.Skip();
             }
-            var valid = Validate(Request);
+            var userName = ValidateAndGetUserName(Request);
 
-            if (valid)
+            if (userName != null)
             {
-                var principal = new ClaimsPrincipal(new ClaimsIdentity("Digest"));
+                var identity = new ClaimsIdentity(Options.UserService.GetClaims(userName), "Digest");
+                identity.AddClaim(new Claim(ClaimTypes.Name, userName));
+                var principal = new ClaimsPrincipal(identity);
                 var ticket = new AuthenticationTicket(principal, new AuthenticationProperties(), Options.AuthenticationScheme);
                 return AuthenticateResult.Success(ticket);
             }
@@ -57,7 +58,7 @@ namespace Microsoft.AspNetCore.Authentication.Digest
             return Task.FromResult(false);
         }
 
-        private bool Validate(HttpRequest request)
+        private string ValidateAndGetUserName(HttpRequest request)
         {
             var header = request.Headers["authorization"];
             var authenticationHeader = AuthenticationHeaderValue.Parse(header);
@@ -68,9 +69,9 @@ namespace Microsoft.AspNetCore.Authentication.Digest
                 var nonceInMemory = _memoryCache.Get(nonce);
                 if (nonceInMemory == null)
                 {
-                    return false;
+                    return null;
                 }
-                var password = dict["username"];
+                var password = Options.UserService.GetPassword(dict["username"]);
                 string ha1 = String.Format("{0}:{1}:{2}",
                                         dict["username"],
                                         dict["realm"],
@@ -91,11 +92,11 @@ namespace Microsoft.AspNetCore.Authentication.Digest
 
                 if (string.CompareOrdinal(dict["response"], computedResponse) == 0)
                 {
-                    return true;
+                    return dict["username"];
                 }
             }
 
-            return false;
+            return null;
         }
 
         private string GenerateNonce()

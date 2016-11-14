@@ -11,7 +11,9 @@ namespace Microsoft.AspNetCore.Builder
     {
         public string AppId { get; set; }
 
-        public string SecretKey { get; set; }      
+        public string SecretKey { get; set; }
+        
+        public IDigestUserService UserService { get; set; }      
 
         public DigestAuthenticationOptions()
         {

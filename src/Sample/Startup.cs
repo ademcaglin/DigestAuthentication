@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authentication.Digest;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 
 namespace Sample
 {
@@ -32,7 +34,8 @@ namespace Sample
                 {
                     SecretKey = "abc670d15a584f4baf0ba48455d3b155",
                     AppId = "jDEf7bMcJVFnqrPd599aSIbhC0IasxLBpGAJeW3Fzh4=",
-                    AutomaticAuthenticate = true
+                    AutomaticAuthenticate = true,
+                    UserService = new FakeService()
                 });
                 builder.Run(async (context) =>
                 {
@@ -40,9 +43,66 @@ namespace Sample
                     {
                         await context.Authentication.ChallengeAsync(DigestAuthenticationDefaults.AuthenticationScheme);
                     }
-                    await context.Response.WriteAsync("adad");
+                    else
+                    {
+                        await WriteHtmlAsync(context.Response, async response =>
+                        {
+                            await WriteTableHeader(response, new string[] { "Claim Type", "Value" }, context.User.Claims.Select(c => new string[] { c.Type, c.Value }));
+
+                        });
+                    }
                 });
             });
+        }
+        private static async Task WriteHtmlAsync(HttpResponse response, Func<HttpResponse, Task> writeContent)
+        {
+            var bootstrap = "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css\" integrity=\"sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u\" crossorigin=\"anonymous\">";
+
+            response.ContentType = "text/html";
+            await response.WriteAsync($"<html><head>{bootstrap}</head><body><div class=\"container\">");
+            await writeContent(response);
+            await response.WriteAsync("</div></body></html>");
+        }
+        private static async Task WriteTableHeader(HttpResponse response, IEnumerable<string> columns, IEnumerable<IEnumerable<string>> data)
+        {
+            await response.WriteAsync("<table class=\"table table-condensed\">");
+            await response.WriteAsync("<tr>");
+            foreach (var column in columns)
+            {
+                await response.WriteAsync($"<th>{HtmlEncode(column)}</th>");
+            }
+            await response.WriteAsync("</tr>");
+            foreach (var row in data)
+            {
+                await response.WriteAsync("<tr>");
+                foreach (var column in row)
+                {
+                    await response.WriteAsync($"<td>{HtmlEncode(column)}</td>");
+                }
+                await response.WriteAsync("</tr>");
+            }
+            await response.WriteAsync("</table>");
+        }
+        private static string HtmlEncode(string content) =>
+            string.IsNullOrEmpty(content) ? string.Empty : HtmlEncoder.Default.Encode(content);
+    }
+
+    public class FakeService : IDigestUserService
+    {
+        public IEnumerable<Claim> GetClaims(string userName)
+        {
+            var list = new List<Claim>();
+            list.Add(new Claim("test", "test"));
+            return list;
+        }
+
+        public string GetPassword(string userName)
+        {
+            if(userName == "bob")
+            {
+                return "bob";
+            }
+            return null;
         }
     }
 }
